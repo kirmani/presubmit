@@ -378,6 +378,10 @@ class AffectedFile(object):
   def GetFile(self):
     return open(self.AbsoluteLocalPath())
 
+  def FileName(self):
+    print(os.path.basename(self._path))
+    return os.path.basename(self._path)
+
   def ReadFile(self):
     return open(self.AbsoluteLocalPath()).read()
 
