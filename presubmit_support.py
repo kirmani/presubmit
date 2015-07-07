@@ -13,9 +13,10 @@ import sys, os, traceback, optparse
 import types
 import time
 import re
+import xml.etree.ElementTree as ET
 
-# TODO: remove
-MOCK_DIRECTORY_ROOT = os.path.dirname(os.path.realpath(__file__))
+PRESUBMIT_PREF_FILE = "presubmit.xml"
+PRESUBMIT_PREF_FILE_PATH = os.path.dirname(os.path.realpath(__file__))
 
 def main():
   global options, args
@@ -150,9 +151,10 @@ def DoPresubmitChecks(verbose,
 
     output = PresubmitOutput(input_stream, output_stream)
     start_time = time.time()
+    base_dir = _GetBaseDir()
     presubmit_files = ListRelevantPresubmitFiles(
-        _AbsoluteLocalPaths(MOCK_DIRECTORY_ROOT),
-        MOCK_DIRECTORY_ROOT)
+        _AbsoluteLocalPaths(base_dir),
+        base_dir)
     if not presubmit_files and verbose:
       output.write("Warning, no PRESUBMIT.py found.\n")
     results = []
@@ -161,7 +163,7 @@ def DoPresubmitChecks(verbose,
     if default_presubmit:
       if verbose:
         output.write("Running default presubmit script.\n")
-      fake_path = os.path.join(MOCK_DIRECTORY_ROOT, 'PRESUBMIT.py')
+      fake_path = os.path.join(base_dir, 'PRESUBMIT.py')
       results += executer.ExecPresubmitScript(default_presubmit, fake_path)
     for filename in presubmit_files:
       filename = os.path.abspath(filename)
@@ -278,7 +280,7 @@ def _LocalPaths(root):
   results = []
   for r, dirs, files in os.walk(root):
     for f in files:
-      results.append(f)
+      results.append(os.path.join(os.path.relpath(r, root), f))
   return results
 
 class _PresubmitResult(object):
@@ -346,10 +348,54 @@ class InputApi(object):
       presubmit_path: The path to the presubmit script being processed.
     """
     # The local path of the currently-being-processed presubmit script.
+    self._repository_root = _GetBaseDir()
     self._current_presubmit_path = os.path.dirname(presubmit_path)
-    self.absolute_paths = _AbsoluteLocalPaths(MOCK_DIRECTORY_ROOT)
-    self.local_paths = _LocalPaths(MOCK_DIRECTORY_ROOT)
+    self._local_paths = _LocalPaths(self._repository_root)
     self.verbose = verbose
+
+  def GetAffectedFiles(self):
+    return [AffectedFile(f, self._repository_root) for f in self._local_paths]
+
+
+class AffectedFile(object):
+  """Representation of a file in a change."""
+
+  def __init__(self, path, repository_root):
+    self._path = path
+    self._local_root = repository_root
+
+  def LocalPath(self):
+    """Returns the path of the file on the local disk relative to the client
+    root.
+    """
+    return normpath(self._path)
+
+  def AbsoluteLocalPath(self):
+    """Returns the absolute path of this file on the local disk.
+    """
+    return os.path.abspath(os.path.join(self._local_root, self.LocalPath()))
+
+  def GetFile(self):
+    return open(self.AbsoluteLocalPath())
+
+  def ReadFile(self):
+    return open(self.AbsoluteLocalPath()).read()
+
+  def ReadFileLines(self):
+    return open(self.AbsoluteLocalPath()).readlines()
+
+def _GetPresubmitPrefTree():
+  return ET.parse(PRESUBMIT_PREF_FILE)
+
+def _GetBaseDir():
+  tree = _GetPresubmitPrefTree()
+  root = tree.getroot()
+  if root.tag != 'presubmit':
+    raise Exception("presubmit tag not found in root")
+  attributes = root.attrib
+  if 'basedir' not in attributes:
+    return '.'
+  return os.path.abspath(attributes['basedir'])
 
 if __name__ == '__main__':
   try:

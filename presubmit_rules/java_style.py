@@ -27,13 +27,12 @@ def _DoJavaCheck(input_api, output_api, f):
 
 def _CheckLineLength(input_api, output_api, f):
   results = ()
-  with open(f) as fh:
-    lines = [l.strip() for l in fh.readlines()]
+  lines = [l.strip() for l in f.ReadFileLines()]
   line_num = 1
   errors = []
   for line in lines:
     if len(line) > COLUMN_LIMIT:
-      errors.append(_ReportErrorFileAndLine("FILEPATH", line_num, line))
+      errors.append(_ReportErrorFileAndLine(f.LocalPath(), line_num, line))
     line_num += 1
   if errors:
     msg = 'Found lines longer than %s characters.' % COLUMN_LIMIT
