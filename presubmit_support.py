@@ -351,11 +351,14 @@ class InputApi(object):
     self._repository_root = _GetBaseDir()
     self._current_presubmit_path = os.path.dirname(presubmit_path)
     self._local_paths = _LocalPaths(self._repository_root)
+    self._license = _GetLicense()
     self.verbose = verbose
 
   def GetAffectedFiles(self):
     return [AffectedFile(f, self._repository_root) for f in self._local_paths]
 
+  def License(self):
+    return self._license
 
 class AffectedFile(object):
   """Representation of a file in a change."""
@@ -375,7 +378,7 @@ class AffectedFile(object):
     """
     return os.path.abspath(os.path.join(self._local_root, self.LocalPath()))
 
-  def GetFile(self):
+  def File(self):
     return open(self.AbsoluteLocalPath())
 
   def FileName(self):
@@ -400,6 +403,17 @@ def _GetBaseDir():
   if 'basedir' not in attributes:
     return '.'
   return os.path.abspath(attributes['basedir'])
+
+def _GetLicense():
+  tree = _GetPresubmitPrefTree()
+  root = tree.getroot()
+  children_tags = [child.tag for child in root]
+  if 'license' not in children_tags:
+    return ''
+  license = root.find('license').text
+  if not license:
+    return ''
+  return license
 
 if __name__ == '__main__':
   try:

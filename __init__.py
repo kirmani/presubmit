@@ -7,5 +7,4 @@
 # Distributed under terms of the MIT license.
 
 import sys
-
 sys.dont_write_bytecode = True
