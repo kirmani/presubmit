@@ -19,6 +19,7 @@ CLOSE_PAREN = ')'
 COMMA = ','
 COMMENT_BLOCK_BEGIN = '/**'
 COMMENT_BLOCK_END = '*/'
+CONDITIONALS = ['if', 'else', 'for', 'do', 'while']
 
 PACKAGE_START_STRING = 'package '
 IMPORT_START_STRING = 'import '
@@ -31,6 +32,7 @@ CLASS = 'class'
 METHOD = 'method'
 VARIABLE = 'variable'
 PARAMETERS = 'parameters'
+CONDITIONAL = 'conditional'
 
 class JavaLexer(object):
   def __init__(self, f):
@@ -38,7 +40,6 @@ class JavaLexer(object):
     self._file_lines = [l for l in f.readlines()]
     self.thing = ROOT
     self.children = _CreateTree(self._RemoveComments(self._RawText()))
-    _PrintTree(self)
 
   def _RawText(self):
     return ''.join([l.strip() for l in self._file_lines])
@@ -69,12 +70,21 @@ class JavaPackage(object):
 
 class JavaImport(object):
   def __init__(self, block):
-    self.imported = block[len(IMPORT_START_STRING):][:-len(SEMICOLON)]
     self.thing = IMPORT
+    imported = block[len(IMPORT_START_STRING):][:-len(SEMICOLON)]
+    self.is_static = False
+    if 'static' in imported:
+      self.is_static = True
+      imported = imported[imported.find('static') + len('static'):]
+    import_path = imported.split('.')
+    self.package = import_path[:len(import_path) - 1]
+    self.name = import_path[len(import_path) - 1]
     self.has_children = False
 
   def Printable(self):
-    return '%s: %s' % (self.thing, self.imported)
+    if self.is_static:
+      return '%s: static %s %s' % (self.thing, self.package, self.name)
+    return '%s: %s %s' % (self.thing, self.package, self.name)
 
 class JavaClass(object):
   def __init__(self, block, leftover):
@@ -133,6 +143,19 @@ class JavaVariable(object):
     return '%s: %s %s %s' % (self.thing, self.qualifiers, self.object_type,
         self.name)
 
+# TODO: Finish Implementation of this
+class JavaConditional(object):
+  def __init__(self, block):
+    self.thing = CONDITIONAL
+    for cond in CONDITIONALS:
+      if cond in block:
+        self.conditional = cond
+    leftover = block[block.find(OPEN_PAREN) + 1: block.find(CLOSE_PAREN)]
+    self.children = _CreateTree(leftover)
+
+  def Printable(self):
+    return '%s: %s' % (self.thing, self.conditional)
+
 class JavaParameters(object):
   def __init__(self, block):
     self.thing = PARAMETERS
@@ -175,14 +198,14 @@ def _CreateTree(text):
     blocks, leftover = _GetBlocks(text)
     root = []
     for block in blocks:
-      if block.startswith(PACKAGE_START_STRING) and block.endswith(SEMICOLON):
-        root.append(JavaPackage(block))
-      if block.startswith(IMPORT_START_STRING) and block.endswith(SEMICOLON):
-        root.append(JavaImport(block))
       if 'class' in block and block.endswith(BRACES_SET):
         root.append(JavaClass(block, leftover))
       elif block.endswith(BRACES_SET):
         root.append(JavaMethod(block, leftover))
+      if block.startswith(PACKAGE_START_STRING) and block.endswith(SEMICOLON):
+        root.append(JavaPackage(block))
+      if block.startswith(IMPORT_START_STRING) and block.endswith(SEMICOLON):
+        root.append(JavaImport(block))
       if '=' in block and block.endswith(SEMICOLON):
         leftside = block[:block.find('=')].rstrip()
         words = leftside.split()
@@ -195,3 +218,52 @@ def _PrintTree(root, spaces=''):
   if hasattr(root, 'children'):
     for child in root.children:
       _PrintTree(child, spaces + '  ')
+
+"""All code below this line is an attempted revision to the generation of the
+Java object tree
+
+TODO (kirmani): COME BACK TO THIS"""
+# TODO: Potentially use this
+class JavaNode(object):
+  def __init__(self, text, children):
+    self.text = text
+    self.children = children
+
+def _GetTreeNew(text, spaces=''):
+  indenters = [(OPEN_PAREN, CLOSE_PAREN), (OPEN_BRACE, CLOSE_BRACE)]
+  result = text
+  remaining = []
+  last_end_brace = 0
+  for index in range(len(result)):
+    if index > last_end_brace:
+      for indenter in indenters:
+        if result[index] == indenter[0]:
+          end_brace = index + 1 + \
+              _GetEndBrace(result[index + 1:], indenter[0], indenter[1])
+          subtext = result[index + 1 : end_brace]
+          remaining.append(subtext)
+          last_end_brace = end_brace
+
+  for r in remaining:
+    result = result.replace(r, '')
+  root = JavaNode(result, [])
+  for r in remaining:
+    root.children.append(_GetTree(r))
+  return root
+
+def _GetEndBrace(text, start, end):
+  count = 0
+  for index in range(len(text)):
+    if text[index] == start:
+      count += 1
+    if text[index] == end:
+      if count > 0:
+        count -= 1
+      else:
+        return index
+  return None
+
+def _PrintTextTree(node, spaces=''):
+  print(spaces + node.text)
+  for child in node.children:
+    _PrintTextTree(child, spaces + '  ')

@@ -13,8 +13,6 @@ import operator
 import sys
 import unicodedata
 
-from parsers import java_parser
-
 COLUMN_LIMIT = 100
 
 def DoJavaChecks(input_api, output_api, files):
@@ -33,9 +31,6 @@ def _DoJavaCheck(input_api, output_api, f):
   results += _CheckWildcardImports(input_api, output_api, f)
   results += _CheckColumnLimit(input_api, output_api, f)
   results += _CheckImportOrderingAndSpacing(input_api, output_api, f)
-
-  # DEBUG
-  lexer = java_parser.JavaLexer(f.File())
   return results
 
 def _CheckFileName(input_api, output_api, f):
